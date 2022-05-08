@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_compile_options(
         -Wall
         -O3
+        -fopenmp
         )
 
 include(FindPkgConfig)
@@ -14,6 +15,7 @@ pkg_search_module(GLEW REQUIRED glew)
 pkg_search_module(GLFW REQUIRED glfw3)
 pkg_search_module(CBLAS REQUIRED cblas)
 pkg_search_module(OPENBLAS REQUIRED openblas)
+find_package(OpenMP REQUIRED)
 
 set(INCLUDE_DIR ./includes)
 set(OPENSOURCE_DIR /home/numi/documents/open_source)
@@ -45,6 +47,7 @@ target_include_directories(untitled SYSTEM PUBLIC
         ${GLFW_INCLUDE_DIRS}
         ${CBLAS_INCLUDE_DIRS}
         ${OPENBLAS_INCLUDE_DIRS}
+        ${OPENMP_INCLUDE_DIRS}
         )
 target_link_libraries(untitled
         ${GL_LIBRARIES}
@@ -52,5 +55,6 @@ target_link_libraries(untitled
         ${GLFW_LIBRARIES}
         ${CBLAS_LIBRARIES}
         ${OPENBLAS_LIBRARIES}
+        ${OpenMP_CXX_FLAGS}
         ${CMAKE_DL_LIBS}
         )

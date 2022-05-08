@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "openmp-use-default-none"
 //
 // Created by numi on 5/6/22.
 //
@@ -166,6 +168,7 @@ void Raytracing(const Camera& camera,
             + dx * (-width + 0.5f)
             + dy * (-height - 0.5f);
 
+    #pragma omp parallel for
     for (int y = 0; y < 2 * height; y++) {
         const Vec3 row_ray = start_ray + dy * y;
         for (int x = 0; x < 2 * width; x++) {
@@ -181,15 +184,14 @@ void Raytracing(const Camera& camera,
                     light_sources, spheres,
                     ambient, index,
                     depth
-                    );
+            );
         }
     }
 
     // convert all components from [0, max_intensity] to [0, 1] and then to int rgba
     float max_intensity = 0;
     for (int i = 0; i < width * height; i++) {
-        for (int j = 0; j < 4; j++) {
-            Color& intensity = intensities[i].colors[j];
+        for (auto & intensity : intensities[i].colors) {
             if (max_intensity < intensity.red) {
                 max_intensity = intensity.red;
             }
@@ -217,3 +219,5 @@ void Raytracing(const Camera& camera,
     }
 }
 
+
+#pragma clang diagnostic pop

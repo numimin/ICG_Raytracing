@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <chrono>
+#include <omp.h>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -15,8 +16,8 @@ void error_callback(int error, const char* description) {
     std::cerr << "Error: " << description << '\n';
 }
 
-constexpr int image_width = 720;
-constexpr int image_height = 480;
+constexpr int image_width = 1280;
+constexpr int image_height = 720;
 
 void UpdateTexture(GLuint texture_id, void* image, int width, int height) {
     glBindTexture(GL_TEXTURE_2D, texture_id);
@@ -129,11 +130,9 @@ void FillScene(Scene& scene) {
 }
 
 void AppGUI(GLuint texture_id) {
-    ImGui::SetNextWindowSize(ImVec2(0, 0));
-    ImGui::Begin("Demo window", nullptr, ImGuiWindowFlags_NoResize);
-    if (ImGui::Button("Hello!")) {
-        std::cout << "Hello!\n";
-    }
+    ImGui::SetNextWindowSize(ImVec2 {});
+    ImGui::SetNextWindowPos(ImVec2 {});
+    ImGui::Begin("Raytracing", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
     ImGui::Image((void*)(intptr_t) texture_id, ImVec2(image_width, image_height));
 
@@ -187,9 +186,10 @@ int main() {
     Scene scene;
     FillScene(scene);
     int image[image_width * image_height];
-    std::chrono::milliseconds start = std::chrono::duration_cast< std::chrono::milliseconds >(
+    /*std::chrono::milliseconds start = std::chrono::duration_cast< std::chrono::milliseconds >(
             std::chrono::system_clock::now().time_since_epoch()
-    );
+    );*/
+    const double start = omp_get_wtime();
     Raytracing(scene.camera,
                scene.sources,
                scene.spheres,
@@ -198,11 +198,13 @@ int main() {
                scene.background,
                scene.ambient
     );
-    std::chrono::milliseconds end = std::chrono::duration_cast< std::chrono::milliseconds >(
+    /*std::chrono::milliseconds end = std::chrono::duration_cast< std::chrono::milliseconds >(
             std::chrono::system_clock::now().time_since_epoch()
-    );
+    );*/
+    const double end = omp_get_wtime();
     auto time = end - start;
-    std::cout << time.count() / 1000.0 << '\n';
+    //std::cout << time.count() / 1000.0 << '\n';
+    std::cout << time << '\n';
 
     auto window = InitImgui();
     if (!window) return EXIT_FAILURE;
