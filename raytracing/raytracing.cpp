@@ -11,7 +11,6 @@ bool Intersection(const Sphere& sphere, const Vec3& start, const Vec3& ray, floa
     const float radius = sphere.radius;
     const float quad_discr = (o * v) * (o * v) - (v * v) * ((o * o) - radius * radius);
     if (quad_discr < 0) return false;
-    if (result == nullptr) return true;
 
     *result = (-(o * v) - sqrtf(quad_discr)) / (v * v);
     return true;
@@ -59,6 +58,26 @@ bool FindPrimitive(
     return idx >= 0;
 }
 
+// Returns true if there are other primitives in front of primitives[index] in path of light,
+// where start + ray is intersection of light with primitives[index], ray is light direction
+bool IsHidden(
+        const Vec3& start,
+        const Vec3& ray,
+        const std::vector<Sphere>& spheres,
+        int index
+) {
+    for (int i = 0; i < spheres.size(); i++) {
+        if (i == index) continue;
+        float result;
+        if (Intersection(spheres[i], start, ray, &result)) {
+            if (result <= 1.0f) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 Color CalculateIntensity(
         const Vec3& start,
         const Vec3& ray,
@@ -74,51 +93,46 @@ Color CalculateIntensity(
         return Color {-1.0f, -1.0f, -1.0f };
     }
 
-    const Sphere& sphere = spheres[sphere_index];
-    const Vec3 intersection = start + ray;
-    const Vec3 normal = (intersection - sphere.center).norm();
-    const Vec3 view = (ray * -1).norm();
+    Vec3 intersection = start + ray;
 
-    Color intensity = sphere.diffuse * ambient;
-    for (const auto& light: light_sources) {
-        const Vec3 light_vec =  light.position - intersection;
-        // check if the object is facing the light in this point
-        const Vec3 light_norm = light_vec.norm();
-        float light_cosine = (normal * light_norm);
-        if (light_cosine < 0) continue;
+    Color intensity {0, 0, 0};
+    Color reflection_coefficient {1, 1, 1};
+    for (int i = 0; i < depth + 1; i++) {
+        const Sphere& sphere = spheres[sphere_index];
 
-        // check if the light isn't hidden by other objects
-        bool is_hidden = false;
-        for (int i = 0; i < spheres.size(); i++) {
-            if (i == sphere_index) continue;
-            float result;
-            if (Intersection(spheres[i], light.position, light_vec * -1, &result)) {
-                if (result < 1.0f) {
-                    is_hidden = true;
-                    break;
-                }
+        Color reflected_intensity = sphere.material.diffuse * ambient;
+
+        const Vec3 normal = (intersection - sphere.center).norm();
+        const Vec3 view = (ray * -1).norm();
+
+        for (const auto& light: light_sources) {
+            const Vec3 light_vec = light.position - intersection;
+            // check if the object is facing the light in this point
+            const Vec3 light_norm = light_vec.norm();
+            float light_cosine = (normal * light_norm);
+            if (light_cosine < 0) continue;
+
+            if (IsHidden(light.position, light_vec * -1, spheres, sphere_index)) {
+                continue;
             }
+
+            // add intensity from light
+            const float reflect_cosine = light_vec.reflection(normal) * view;
+            const Color specular = reflect_cosine > 0 ? sphere.material.specular * powf(reflect_cosine, sphere.material.power) : Color {};
+            reflected_intensity += light.color * (sphere.material.diffuse * light_cosine + specular) * light_vec.f_att();
         }
-        if (is_hidden) continue;
 
-        // add intensity from light
-        const float reflect_cosine = powf(light_vec.reflection(normal) * view, 100);
-        intensity += light.color * (sphere.diffuse * light_cosine + sphere.specular * reflect_cosine) * light_vec.f_att();
-    }
+        intensity += reflection_coefficient * reflected_intensity;
 
-    // add intensity reflected from other objects
-    if (depth > 0) {
-        int index;
-        float min;
-        const Vec3 new_ray = ray.reflection(normal) * -1;
-        if (FindPrimitive(intersection, new_ray, spheres, &min, &index, sphere_index)) {
-            const Color reflected_intensity = CalculateIntensity(
-                    intersection, new_ray * min,
-                    light_sources, spheres,
-                    ambient, index,
-                    depth - 1
-            );
-            intensity += sphere.specular * reflected_intensity * (new_ray * min).f_att();
+        // find light from other objects
+        if (i != depth) {
+            const Vec3 new_ray = ray.reflection(normal) * -1;
+            float min_intersection;
+            if (!FindPrimitive(intersection, new_ray, spheres, &min_intersection, &sphere_index, sphere_index)) {
+                break;
+            }
+            intersection += new_ray * min_intersection;
+            reflection_coefficient *= sphere.material.specular * (new_ray * min_intersection).f_att();
         }
     }
 
@@ -136,6 +150,7 @@ void Raytracing(const Camera& camera,
                 const std::vector<Light>& light_sources,
                 const std::vector<Sphere>& spheres,
                 int* image,
+                int depth,
                 const Color& background,
                 const Color& ambient
 ) {
@@ -165,7 +180,7 @@ void Raytracing(const Camera& camera,
                     start, ray * min_intersection,
                     light_sources, spheres,
                     ambient, index,
-                    3
+                    depth
                     );
         }
     }

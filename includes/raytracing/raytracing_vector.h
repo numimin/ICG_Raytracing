@@ -1,23 +1,24 @@
 //
-// Created by numi on 5/6/22.
+// Created by numi on 5/7/22.
 //
 
-#ifndef UNTITLED_RAYTRACING_H
-#define UNTITLED_RAYTRACING_H
+#ifndef UNTITLED_RAYTRACING_VECTOR_H
+#define UNTITLED_RAYTRACING_VECTOR_H
 
 #include <vector>
 #include <cmath>
+#include <xmmintrin.h>
 
 #include "imgui.h" //for color macros
 
 struct Color {
-    float red = 0, green = 0, blue = 0;
+    float red, green, blue;
     int rgba() const {
         return IM_COL32(
-        (int) (red * 255),
-        (int) (green * 255),
-        (int) (blue * 255),
-        255);
+                (int) (red * 255),
+                (int) (green * 255),
+                (int) (blue * 255),
+                255);
     }
 
     Color operator*(const Color& other) const {
@@ -43,40 +44,48 @@ struct Color {
         return *this;
     }
 
-    Color& operator*=(const Color& other) {
-        red *= other.red;
-        green *= other.green;
-        blue *= other.blue;
-        return *this;
-    }
-
     Color operator+(const Color& other) const {
         return Color {red + other.red, green + other.green, blue + other.blue};
     }
 };
 
-struct Vec3 {
-    float x = 0, y = 0, z = 0;
-    [[nodiscard]] Vec3 operator-(const Vec3& other) const {
-        return Vec3 {x - other.x, y - other.y, z - other.z};
+struct alignas(16) Vec3 {
+    float x, y, z, w;
+
+    Vec3 operator-(const Vec3& other) const {
+        return Vec3 {x, y, z} -= other;
     }
 
-    [[nodiscard]] Vec3 operator+(const Vec3& other) const {
-        return Vec3 {x + other.x, y + other.y, z + other.z};
+    Vec3 operator+(const Vec3& other) const {
+        return Vec3 {x, y, z} += other;
     }
 
-    [[nodiscard]] Vec3 operator*(float factor) const {
-        return Vec3 {x * factor, y * factor, z * factor};
+    Vec3 operator*(float factor) const {
+        return Vec3 {x, y, z} *= factor;
     }
 
-    [[nodiscard]] Vec3 operator/(float factor) const {
+    Vec3 operator/(float factor) const {
         return *this * (1 / factor);
     }
 
     Vec3& operator+=(const Vec3& other) {
-        x += other.x;
-        y += other.y;
-        z += other.z;
+        __m128* const data = (__m128*) &x;
+        const __m128* const other_data = (__m128*) &other.x;
+        *data = _mm_add_ps(*data, *other_data);
+        return *this;
+    }
+
+    Vec3& operator-=(const Vec3& other) {
+        __m128* const data = (__m128*) &x;
+        const __m128* const other_data = (__m128*) &other.x;
+        *data = _mm_sub_ps(*data, *other_data);
+        return *this;
+    }
+
+    Vec3& operator*=(float factor) {
+        const __m128 scal = _mm_set_ps1(factor);
+        __m128* const data = (__m128*) &x;
+        *data = _mm_mul_ps(*data, scal);
         return *this;
     }
 
@@ -111,16 +120,11 @@ struct Vec3 {
     }
 };
 
-struct Material {
-    Color diffuse; //=ambient
-    Color specular;
-    float power = 0;
-};
-
 struct Sphere {
     Vec3 center;
-    float radius = 0;
-    Material material;
+    float radius;
+    Color diffuse; //=ambient
+    Color specular;
 };
 
 struct Light {
@@ -155,12 +159,11 @@ struct Camera {
 void Raytracing(const Camera& camera,
                 const std::vector<Light>& light_sources,
                 const std::vector<Sphere>& spheres,
-                int* image, //sw x sh,
-                int depth = 1,
+                int* image, //sw x sh
                 const Color& background = Color {0, 0, 0},
                 const Color& ambient = Color {1, 1, 1}
-                );
+);
 
 bool Intersection(const Sphere& sphere, const Vec3& start, const Vec3& ray, float* result);
 
-#endif //UNTITLED_RAYTRACING_H
+#endif //UNTITLED_RAYTRACING_VECTOR_H
