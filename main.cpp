@@ -3,7 +3,6 @@
 #include <GLFW/glfw3.h>
 
 #include <iostream>
-#include <chrono>
 #include <omp.h>
 
 #include "imgui.h"
@@ -16,8 +15,8 @@ void error_callback(int error, const char* description) {
     std::cerr << "Error: " << description << '\n';
 }
 
-constexpr int image_width = 1280;
-constexpr int image_height = 720;
+constexpr int image_width = 720;
+constexpr int image_height = 480;
 
 void UpdateTexture(GLuint texture_id, void* image, int width, int height) {
     glBindTexture(GL_TEXTURE_2D, texture_id);
@@ -37,19 +36,38 @@ GLuint LoadSampleTexture(void* image, int width, int height) {
     return image_texture;
 }
 
+constexpr float angles_to_radians = M_PI / 180.0;
+
 struct Scene {
     std::vector<Sphere> spheres = {};
     std::vector<Light> sources = {};
-    Camera camera {
-    Vec3 { 0, image_height / 2.0, 0 },
-    Vec3 { 0, image_height / 2.0, 1 },
-    Vec3 { 0, 1, 0 },
-    image_width * 0.5, 5 * image_width,
-    image_width, image_height
-    };
+    Vec3 eye { 0, 0, 0 };
+    Vec3 view { 0, image_height * 0.75, image_width * 3 };
+    Vec3 up { 0, 1, 0 };
+    float zn = image_width * 0.5;
+    float zf = 5 * image_width;
     Color background {0.0, 0.0, 0.0};
     Color ambient {0.01, 0.01, 0.01};
     int depth = 1;
+    float zoom_factor = 1.0;
+    float azimuth = 0.0;
+    float attitude = 0.0;
+
+    [[nodiscard]] Camera camera() const {
+        const float radius = (view - eye).length();
+        const Vec3 z = (eye - view).norm();
+        const Vec3 right = z.cross(up).norm();
+        const Vec3 up = right.cross(z).norm();
+        return Camera {
+                view + (
+                        (z * cosf(azimuth * angles_to_radians) + right * sinf(azimuth * angles_to_radians)) * cosf(attitude * angles_to_radians)
+                        + up * sinf(attitude * angles_to_radians)
+                        ) * (radius / zoom_factor),
+                view, up,
+                zn, zf,
+                image_width, image_height
+        };
+    }
 };
 
 void FillScene(Scene& scene) {
@@ -94,6 +112,23 @@ void FillScene(Scene& scene) {
 
     auto& sources = scene.sources;
     sources.push_back({
+                              Vec3 {-image_width, image_width, image_width},
+                              Color { 1.0, 1.0, 1.0 }
+                      });
+
+    sources.push_back({
+                              Vec3 {-image_width, -image_width, image_width},
+                              Color { 1.0, 1.0, 1.0 }
+                      });
+    sources.push_back({
+                              Vec3 {image_width, -image_width, image_width},
+                              Color { 1.0, 1.0, 1.0 }
+                      });
+    sources.push_back({
+                              Vec3 {image_width, image_width, image_width},
+                              Color { 1.0, 1.0, 1.0 }
+                      });
+    sources.push_back({
                               Vec3 {0, 0, image_width},
                               Color { 1.0, 1.0, 1.0 }
                       });
@@ -127,29 +162,55 @@ void FillScene(Scene& scene) {
                               Vec3 {0, image_height * 1.5, image_width * 2.7  },
                               Color { 1.0, 1.0, 1.0 }
                       });
+    sources.push_back({
+                              Vec3 {0, image_height * 1.5, image_width * 5  },
+                              Color { 1.0, 1.0, 1.0 }
+                      });
+    sources.push_back({
+                              Vec3 {0, image_height * 1.5, image_width * 4  },
+                              Color { 1.0, 1.0, 1.0 }
+                      });
 }
 
-void AppGUI(GLuint texture_id) {
+void AppGUI(Scene& scene, GLuint texture_id, int* image) {
     ImGui::SetNextWindowSize(ImVec2 {});
     ImGui::SetNextWindowPos(ImVec2 {});
     ImGui::Begin("Raytracing", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
+    ImGui::BeginGroup();
+
+    ImGui::PushItemWidth(-image_width);
+    ImGui::InputFloat("Znear", &scene.zn);
+    ImGui::InputFloat("Zoom factor", &scene.zoom_factor);
+    ImGui::InputFloat("Azimuth", &scene.azimuth);
+    ImGui::InputFloat("Attitude", &scene.attitude);
+    ImGui::InputInt("Depth", &scene.depth);
+
+    if (ImGui::Button("Render")) {
+        const double start = omp_get_wtime();
+        Raytracing(scene.camera(),
+                   scene.sources,
+                   scene.spheres,
+                   image,
+                   scene.depth,
+                   scene.background,
+                   scene.ambient
+        );
+        UpdateTexture(texture_id, image, image_width, image_height);
+        const double end = omp_get_wtime();
+        auto time = end - start;
+        std::cout << time << '\n';
+    }
+
+    ImGui::EndGroup();
+    ImGui::SameLine();
     ImGui::Image((void*)(intptr_t) texture_id, ImVec2(image_width, image_height));
 
     ImGui::End();
 }
 
 void MainLoop(Scene& scene, int* image, GLuint texture_id) {
-    /*Raytracing(scene.camera,
-               scene.sources,
-               scene.spheres,
-               image,
-               scene.depth,
-               scene.background,
-               scene.ambient
-    );
-    UpdateTexture(texture_id, image, image_width, image_height);*/
-    AppGUI(texture_id);
+    AppGUI(scene, texture_id, image);
 }
 
 GLFWwindow* InitImgui() {
@@ -186,11 +247,8 @@ int main() {
     Scene scene;
     FillScene(scene);
     int image[image_width * image_height];
-    /*std::chrono::milliseconds start = std::chrono::duration_cast< std::chrono::milliseconds >(
-            std::chrono::system_clock::now().time_since_epoch()
-    );*/
     const double start = omp_get_wtime();
-    Raytracing(scene.camera,
+    Raytracing(scene.camera(),
                scene.sources,
                scene.spheres,
                image,
@@ -198,12 +256,8 @@ int main() {
                scene.background,
                scene.ambient
     );
-    /*std::chrono::milliseconds end = std::chrono::duration_cast< std::chrono::milliseconds >(
-            std::chrono::system_clock::now().time_since_epoch()
-    );*/
     const double end = omp_get_wtime();
     auto time = end - start;
-    //std::cout << time.count() / 1000.0 << '\n';
     std::cout << time << '\n';
 
     auto window = InitImgui();
