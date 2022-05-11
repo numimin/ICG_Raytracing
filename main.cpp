@@ -39,7 +39,7 @@ GLuint LoadSampleTexture(void* image, int width, int height) {
 constexpr float angles_to_radians = M_PI / 180.0;
 
 struct Scene {
-    std::vector<Sphere> spheres = {};
+    std::vector<std::unique_ptr<Primitive>> spheres = {};
     std::vector<Light> sources = {};
     Vec3 eye { 0, 0, 0 };
     Vec3 view { 0, image_height * 0.75, image_width * 3 };
@@ -72,43 +72,43 @@ struct Scene {
 
 void FillScene(Scene& scene) {
     auto& spheres = scene.spheres;
-    spheres.push_back({
-                              Vec3 { -image_width, 0, image_width * 3 },
-                              image_width / 2.0f,
-                              {
-                                      Color { 0.1, 0.1, 0.9 },
-                                      Color { 0, 0, 0 },
-                                      100
-                              }
-                      });
-    spheres.push_back({
+    spheres.push_back(std::make_unique<Sphere>(
+            Vec3 { -image_width, 0, image_width * 3 },
+            image_width / 2.0f,
+            Material {
+                    Color { 0.1, 0.1, 0.9 },
+                    Color { 0, 0, 0 },
+                    100
+            }
+    ));
+    spheres.push_back(std::make_unique<Sphere>(
                               Vec3 { -image_width * 0.7f, image_height * 1.5, image_width * 4 },
                               image_width / 2.0f,
-                              {
+                              Material {
                                       Color { 0.5, 0.1, 0.9 },
                                       Color { 1, 1, 1 },
                                       100
                               }
-                      });
-    spheres.push_back({
+                      ));
+    spheres.push_back(std::make_unique<Sphere>(
                               Vec3 { 0, 0, image_width * 3 },
                               image_width / 2.0f,
-                              {
+                              Material {
                                       Color { 0.658, 0.658, 0.658 },
                                       Color { 0.658, 0.658, 0.658 },
                                       150
                               }
-                      });
+                      ));
 
-    spheres.push_back({
+    spheres.push_back(std::make_unique<Sphere>(
                               Vec3 { image_width, 0, image_width * 2 },
                               image_width / 2.0f,
-                              {
+                              Material {
                                       Color { 1, 1, 1 },
                                       Color { 0, 0, 0 },
                                       0
                               }
-                      });
+                      ));
 
     auto& sources = scene.sources;
     sources.push_back({

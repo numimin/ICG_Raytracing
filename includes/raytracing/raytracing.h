@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <cmath>
+#include <memory>
 
 #include "imgui.h" //for color macros
 
@@ -117,10 +118,36 @@ struct Material {
     float power = 0;
 };
 
-struct Sphere {
+class Primitive {
+public:
+    virtual Vec3 Normal(const Vec3& intersection) const = 0;
+    virtual bool Intersection(const Vec3& start, const Vec3& ray, float* result) const = 0;
+    virtual ~Primitive() = default;
+    virtual const Material& material() const = 0;
+};
+
+class Sphere : public Primitive {
+private:
     Vec3 center;
     float radius = 0;
-    Material material;
+    Material _material;
+public:
+    Sphere(const Vec3& center, float radius, const Material& material): center {center}, radius {radius}, _material {material} {}
+    [[nodiscard]] const Material& material() const override { return _material; }
+
+    bool Intersection(const Vec3 &start, const Vec3 &ray, float *result) const override {
+        const Vec3& o = start - center;
+        const Vec3& v = ray;
+        const float quad_discr = (o * v) * (o * v) - (v * v) * ((o * o) - radius * radius);
+        if (quad_discr < 0) return false;
+
+        *result = (-(o * v) - sqrtf(quad_discr)) / (v * v);
+        return true;
+    }
+
+    [[nodiscard]] Vec3 Normal(const Vec3 &intersection) const override {
+        return (intersection - center).norm();
+    }
 };
 
 struct Light {
@@ -154,13 +181,11 @@ struct Camera {
 
 void Raytracing(const Camera& camera,
                 const std::vector<Light>& light_sources,
-                const std::vector<Sphere>& spheres,
+                const std::vector<std::unique_ptr<Primitive>>& primitives,
                 int* image, //sw x sh,
                 int depth = 1,
                 const Color& background = Color {0, 0, 0},
                 const Color& ambient = Color {1, 1, 1}
                 );
-
-bool Intersection(const Sphere& sphere, const Vec3& start, const Vec3& ray, float* result);
 
 #endif //UNTITLED_RAYTRACING_H
