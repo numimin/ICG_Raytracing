@@ -208,4 +208,8 @@ void Raytracing(const Camera& camera,
     }
 }
 
+float OrthogonalEquation(const Vec3& start, const Vec3& ray, const Vec3& normal) {
+    return (start * normal) / (ray * normal);
+}
+
 #pragma clang diagnostic pop

@@ -108,7 +108,7 @@ struct Vec3 {
     }
 
     [[nodiscard]] float f_att() const {
-        return 1 / (1 + length() * 0.001);
+        return 1 / (1 + length() * 0.0005);
     }
 };
 
@@ -147,6 +147,42 @@ public:
 
     [[nodiscard]] Vec3 Normal(const Vec3 &intersection) const override {
         return (intersection - center).norm();
+    }
+};
+
+// returns k for which (start + k * ray, normal) = 0
+float OrthogonalEquation(const Vec3& start, const Vec3& ray, const Vec3& normal);
+
+class Triangle : public Primitive {
+private:
+    Vec3 a, b, c;
+    Vec3 normal;
+    Vec3 ab_normal, bc_normal, ca_normal;
+    Material _material;
+public:
+    // a, b, c are clockwise
+    // normal is (c - a) x (b - a)
+    Triangle(const Vec3& a, const Vec3& b, const Vec3& c, const Material& material):
+            a {a}, b {b}, c {c},
+            normal { (c - a).cross(b - a).norm() },
+            ab_normal { normal.cross(b - a) },
+            bc_normal { normal.cross(c - b) },
+            ca_normal { normal.cross(a - c) },
+            _material {material} {}
+    [[nodiscard]] const Material& material() const override { return _material; }
+
+    bool Intersection(const Vec3 &start, const Vec3 &ray, float *result) const override {
+        const float k = -((start - a) * normal) / (normal * ray);
+        const Vec3 point = start + ray * k;
+        if (OrthogonalEquation(a - c, point - c, ab_normal) < 1) return false;
+        if (OrthogonalEquation(b - a, point - a, bc_normal) < 1) return false;
+        if (OrthogonalEquation(c - b, point - b, ca_normal) < 1) return false;
+        *result = k;
+        return true;
+    }
+
+    [[nodiscard]] Vec3 Normal(const Vec3 &intersection) const override {
+        return normal;
     }
 };
 

@@ -39,12 +39,12 @@ GLuint LoadSampleTexture(void* image, int width, int height) {
 constexpr float angles_to_radians = M_PI / 180.0;
 
 struct Scene {
-    std::vector<std::unique_ptr<Primitive>> spheres = {};
+    std::vector<std::unique_ptr<Primitive>> primitives = {};
     std::vector<Light> sources = {};
-    Vec3 eye { 0, 0, 0 };
-    Vec3 view { 0, image_height * 0.75, image_width * 3 };
+    Vec3 eye { 0, -image_height * 0.5 * 0.5, 0 };
+    Vec3 view { 0, -image_height * 0.5 * 0.5, image_width / 4.0f };
     Vec3 up { 0, 1, 0 };
-    float zn = image_width * 0.5;
+    float zn = image_width * 0.05;
     float zf = 5 * image_width;
     Color background {0.0, 0.0, 0.0};
     Color ambient {0.01, 0.01, 0.01};
@@ -70,9 +70,109 @@ struct Scene {
     }
 };
 
-void FillScene(Scene& scene) {
-    auto& spheres = scene.spheres;
-    spheres.push_back(std::make_unique<Sphere>(
+struct Box {
+    Vec3 center;
+    float width, height, distance;
+    Vec3 x, y, z;
+    Vec3 half_x() const {
+        return x * (width / 2);
+    }
+
+    Vec3 half_y() const {
+        return y * (height / 2);
+    }
+
+    Vec3 half_z() const {
+        return z * (distance / 2);
+    }
+
+    Vec3 at(float x = 0, float y = 0, float z = 0) const {
+        return center + half_x() * x + half_y() * y + half_z() * z;
+    }
+};
+
+void FillSquare(std::vector<std::unique_ptr<Primitive>>& primitives,
+                const Material& material,
+                const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d
+) {
+    primitives.push_back(std::make_unique<Triangle>(a, b, c, material));
+    primitives.push_back(std::make_unique<Triangle>(a, c, d, material));
+}
+
+// Fills a box opened from front plane (orthogonal to z, with minimum z)
+void FillBoxScene(std::vector<std::unique_ptr<Primitive>>& primitives,
+                  std::vector<Light>& sources,
+                  const Box& box,
+                  const Material& material
+) {
+    const Vec3 back_low_left = box.at(-1, -1, -1);
+    const Vec3 back_up_left = box.at(-1, 1, -1);
+    const Vec3 back_up_right = box.at(1, 1, -1);
+    const Vec3 back_low_right = box.at(1, -1, -1);
+
+    const Vec3 front_low_left = box.at(-1, -1, 1);
+    const Vec3 front_up_left = box.at(-1, 1, 1);
+    const Vec3 front_up_right = box.at(1, 1, 1);
+    const Vec3 front_low_right = box.at(1, -1, 1);
+
+    FillSquare(primitives,
+               material,
+               back_low_left,
+               back_up_left,
+               back_up_right,
+               back_low_right
+    );
+    FillSquare(primitives,
+               Material {
+        // Mirror
+        Color {0, 0, 0},  Color {1, 1, 1}, 20
+        },
+               front_low_left,
+               front_up_left,
+               back_up_left,
+               back_low_left
+    );
+    // Water tank
+    FillSquare(primitives,
+               Material {
+                       Color {0, 0, 1}, Color {0.9, 0.9, 0.9}, 20
+               },
+               back_low_right,
+               back_up_right,
+               front_up_right,
+               front_low_right
+    );
+    FillSquare(primitives,
+               material,
+               back_up_left,
+               front_up_left,
+               front_up_right,
+               back_up_right
+    );
+    FillSquare(primitives,
+               material,
+               front_low_left,
+               back_low_left,
+               back_low_right,
+               front_low_right
+    );
+}
+
+void FillScene(
+        std::vector<std::unique_ptr<Primitive>>& primitives,
+        std::vector<Light>& sources
+) {
+    primitives.push_back(std::make_unique<Triangle>(
+            Vec3 {image_width * 3, -image_height * 3, 4 * image_width},
+            Vec3 {0, image_height * 3, 5 * image_width},
+            Vec3 {-image_width * 3, -image_height * 3, 5 * image_width},
+            Material {
+                    Color { 0.9, 0.9, 0.9 },
+                    Color { 1, 1, 1 },
+                    100
+            }
+    ));
+    primitives.push_back(std::make_unique<Sphere>(
             Vec3 { -image_width, 0, image_width * 3 },
             image_width / 2.0f,
             Material {
@@ -81,7 +181,7 @@ void FillScene(Scene& scene) {
                     100
             }
     ));
-    spheres.push_back(std::make_unique<Sphere>(
+    primitives.push_back(std::make_unique<Sphere>(
                               Vec3 { -image_width * 0.7f, image_height * 1.5, image_width * 4 },
                               image_width / 2.0f,
                               Material {
@@ -90,7 +190,7 @@ void FillScene(Scene& scene) {
                                       100
                               }
                       ));
-    spheres.push_back(std::make_unique<Sphere>(
+    primitives.push_back(std::make_unique<Sphere>(
                               Vec3 { 0, 0, image_width * 3 },
                               image_width / 2.0f,
                               Material {
@@ -100,7 +200,7 @@ void FillScene(Scene& scene) {
                               }
                       ));
 
-    spheres.push_back(std::make_unique<Sphere>(
+    primitives.push_back(std::make_unique<Sphere>(
                               Vec3 { image_width, 0, image_width * 2 },
                               image_width / 2.0f,
                               Material {
@@ -110,7 +210,6 @@ void FillScene(Scene& scene) {
                               }
                       ));
 
-    auto& sources = scene.sources;
     sources.push_back({
                               Vec3 {-image_width, image_width, image_width},
                               Color { 1.0, 1.0, 1.0 }
@@ -190,7 +289,7 @@ void AppGUI(Scene& scene, GLuint texture_id, int* image) {
         const double start = omp_get_wtime();
         Raytracing(scene.camera(),
                    scene.sources,
-                   scene.spheres,
+                   scene.primitives,
                    image,
                    scene.depth,
                    scene.background,
@@ -243,14 +342,114 @@ GLFWwindow* InitImgui() {
     return window;
 }
 
+void FillStrangeScene(Scene& scene) {
+    FillBoxScene(scene.primitives, scene.sources, Box {
+                         Vec3{0, 0, 2 * image_width},
+                         image_width, image_height, 3 * image_width,
+                         Vec3{-1, 0, 0},
+                         Vec3{0, 1, 0},
+                         Vec3{0, 0, -1}
+                 },
+                 Material {
+                         Color { 0.9, 0.9, 0.9 },
+                         Color {1, 1, 1},
+                         100
+                 }
+    );
+    scene.primitives.push_back(std::make_unique<Sphere>(
+            Vec3 {0, 0, 0.75 * image_width},
+            image_width / 50,
+            Material {
+                    Color { 0.9, 0.1, 0.5 },
+                    Color {0, 0, 0},
+                    100
+            }
+    ));
+    scene.sources.push_back(Light {
+            Vec3 {0, 0, 0.5 * image_width},
+            Color {1, 1, 1}
+    });
+    scene.sources.push_back(Light {
+            Vec3 {-image_width, 0, 0.5 * image_width},
+            Color {1, 1, 1}
+    });
+    scene.sources.push_back(Light {
+            Vec3 {image_width, 0, 0.5 * image_width},
+            Color {1, 1, 1}
+    });
+}
+
 int main() {
     Scene scene;
-    FillScene(scene);
+    //FillScene(scene.primitives, scene.sources);
+    FillBoxScene(scene.primitives, scene.sources, Box {
+            Vec3{0, 0, image_width * 0.1},
+            image_width, image_height, 0.1 * image_width,
+            Vec3{-1, 0, 0},
+            Vec3{0, 1, 0},
+            Vec3{0, 0, -1}
+        },
+        Material {
+            Color { 1, 1, 1 },
+            Color {0.0, 0.0, 0.0},
+            100
+        }
+    );
+    /*scene.primitives.push_back(std::make_unique<Sphere>(
+            Vec3 {0, 0,0.5 *  image_width},
+            image_width * 0.25,
+            Material {
+                Color { 0.9, 0.1, 0.5 },
+                Color {0, 0, 0},
+                100
+            }
+            ));*/
+    scene.primitives.push_back(std::make_unique<Sphere>(
+            Vec3{image_width * 0.01, -image_height * 0.5 + image_width * 0.05, image_width * 0.1},
+            image_width * 0.05,
+            Material {
+                    Color { 0.9, 0.1, 0.5 },
+                    Color {},
+                    100
+            }
+    ));
+    /*scene.sources.push_back(Light {
+            Vec3{0, image_height * 0.1, image_width * 0.1},
+            Color {1, 1, 1}
+    });*/
+    scene.sources.push_back(Light {
+            Vec3{0, image_height * 0.45, image_width * 0.05},
+            Color {1, 1, 1}
+    });
+    scene.sources.push_back(Light {
+            Vec3{0, 0, image_width * 0.05},
+            Color {1, 1, 1}
+    });
+    scene.sources.push_back(Light {
+        Vec3 {0, 0, 0.05 * image_width},
+        Color {1, 1, 1}
+    });
+    scene.sources.push_back(Light {
+            Vec3 {0, -image_height * 0.9, 0.05 * image_width},
+            Color {1, 1, 1}
+    });
+    scene.sources.push_back(Light {
+            Vec3 {0, image_height * 0.9, 0.05 * image_width},
+            Color {1, 1, 1}
+    });
+    scene.sources.push_back(Light {
+            Vec3 {-image_width * 0.9, 0, 0.05 * image_width},
+            Color {1, 1, 1}
+    });
+    scene.sources.push_back(Light {
+            Vec3 {image_width * 0.9, 0, 0.05 * image_width},
+            Color {1, 1, 1}
+    });
     int image[image_width * image_height];
     const double start = omp_get_wtime();
     Raytracing(scene.camera(),
                scene.sources,
-               scene.spheres,
+               scene.primitives,
                image,
                scene.depth,
                scene.background,
