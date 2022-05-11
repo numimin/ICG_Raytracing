@@ -93,10 +93,11 @@ struct Box {
 
 void FillSquare(std::vector<std::unique_ptr<Primitive>>& primitives,
                 const Material& material,
-                const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d
+                const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d,
+                bool first_exclude = false
 ) {
-    primitives.push_back(std::make_unique<Triangle>(a, b, c, material));
-    primitives.push_back(std::make_unique<Triangle>(a, c, d, material));
+    primitives.push_back(std::make_unique<Triangle>(a, b, c, material, first_exclude));
+    primitives.push_back(std::make_unique<Triangle>(a, c, d, material, !first_exclude));
 }
 
 // Fills a box opened from front plane (orthogonal to z, with minimum z)
@@ -130,7 +131,8 @@ void FillBoxScene(std::vector<std::unique_ptr<Primitive>>& primitives,
                front_low_left,
                front_up_left,
                back_up_left,
-               back_low_left
+               back_low_left,
+               true
     );
     // Water tank
     FillSquare(primitives,
